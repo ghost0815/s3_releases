@@ -52,6 +52,8 @@ txt_proto="Protocol"
 # menu txt
 txt_remove_menu='$txt_tc verwijderen';
 txt_add_menu='$txt_tc toevoegen';
+txt_search="Search"
+txt_search_machine="Search by machine name (substring):"
 txt_main_revision="\n De actuele ${REPO^^} versie is : r";
 txt_bmenu_title="Buildmenü";
 
@@ -179,6 +181,7 @@ txt_s3tup_msg_extract_file_unreadable="file is unreadable:"
 txt_s3tup_msg_extract_extension_unknown="unrecognized file extension:"
 txt_s3tup_msg_gtp_missing="missing description"
 txt_s3tup_msg_gtp_info="run \Zr<${txt_s3tup_menu_command_label_setup}>\ZR to show details"
+txt_s3tup_msg_gtp_info_oesdk="run \Zr<${txt_s3tup_menu_command_label_download}>\ZR or \Zr<${txt_s3tup_menu_command_label_start}>\ZR to show details"
 txt_s3tup_msg_paktc="Press any key to continue"
 txt_s3tup_msg_check_toolchain_empty="Parameter${w_l} ${txt_tc} not set!"
 txt_s3tup_msg_check_toolchain_not_supported="${txt_tc} ${txt_lib,,} update not supported!"

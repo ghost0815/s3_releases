@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #simplebuild_plugin tcupdate
-pversion="0.26.2";
+pversion="0.27.0";
 pname="s3.TUP";
 pdesc="Plugin $pname v$pversion";
 tc_url="aHR0cHM6Ly9zaW1wbGVidWlsZC5kZWR5bi5pby90b29sY2hhaW5zLw==";
@@ -364,11 +364,16 @@ _create_tc(){
 			if [ "$tplempty" == "0" ];then
 				for t in "${TPL_LIST[@]}";do
 					props=$(_get_template_properties "$t");
-					desc=$(echo "$props" | awk -F'^' '{print $1}' | xargs);
-					version=$(echo "$props" | awk -F'^' '{print $2}' | xargs); [ -z "$version" ] && version="0";
-					changed=$(echo "$props" | awk -F'^' '{print $6}' | xargs);[ -n "$changed" ] && changed=", changed:$changed";
-					copyof=$(echo "$props" | awk -F'^' '{print $7}' | xargs);[ -n "$copyof" ] && copyof=", copy of:$copyof";
-					version_tc=$(echo $(_get_template_properties "$tcdir/$t/.config") | awk -F'^' '{print $2}' | xargs); [ -z "$version_tc" ] && version_tc="0";
+					IFS='^' read -r desc version _ _ _ changed copyof <<< "$props";
+					desc="${desc## }"; desc="${desc%% }";
+					version="${version## }"; version="${version%% }"; [ -z "$version" ] && version="0";
+					changed="${changed## }"; changed="${changed%% }"; [ -n "$changed" ] && changed=", changed:$changed";
+					copyof="${copyof## }"; copyof="${copyof%% }"; [ -n "$copyof" ] && copyof=", copy of:$copyof";
+					version_tc="0";
+					if [ -f "$tcdir/$t/.config" ];then
+						version_tc=$(awk -F': ' '/^#toolchain template version:/{v=$NF; gsub(/[^0-9]/,"",v); print v; exit}' "$tcdir/$t/.config");
+						[ -z "$version_tc" ] && version_tc="0";
+					fi;
 					if [[ -d "$tcdir/$t" && -f "$tccfgdir/$t" ]];then
 						[ "$version" -gt "$version_tc" ] && color="\Z1" || color="\Zb\Z1";
 					else
@@ -747,6 +752,7 @@ _tpl_editor(){
 	copyof=$(echo "$props" | awk -F'^' '{print $7}' | xargs);
 
 	editordir="${1,,}srcdir";editordir="${!editordir}";
+	[ -z "$editordir" ] || [ ! -d "$editordir" ] && editordir="$cttpldir";
 
 	if [ -f "$cttpldir/$tpl" ];then #copy the existing template to edit it
 		cp -f "$cttpldir/$tpl" "$editordir/.config"
@@ -1224,13 +1230,15 @@ _get_template_properties(){
 	desc="";
 	if [ -f "$1" ];then
 		if [ -z "$2" ];then
-			desc="$(awk -F': ' '/^#toolchain template:./{print $NF}' "$1" | xargs)";
-			version="$(awk -F': ' '/^#toolchain template version:./{print $NF}' "$1" | xargs)";
-			cflags="$(awk -F': ' '/^#toolchain template cflags:./{print $NF}' "$1" | xargs)";
-			ldflags="$(awk -F': ' '/^#toolchain template ldflags:./{print $NF}' "$1" | xargs)";
-			migrate="$(awk -F': ' '/^#toolchain template migrate:./{print $NF}' "$1" | xargs)";
-			updated="$(awk -F': ' '/^#toolchain template updated:./{print $NF}' "$1" | xargs)";
-			copyof="$(awk -F': ' '/^#toolchain template copyof:./{print $NF}' "$1" | xargs)";
+			eval "$(awk -F': ' '
+				/^#toolchain template:./       && !/_/{d=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",d); printf "desc=\"%s\";",d}
+				/^#toolchain template version:/{v=$NF; gsub(/[^0-9]/,"",v); printf "version=\"%s\";",v}
+				/^#toolchain template cflags:/ {c=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",c); printf "cflags=\"%s\";",c}
+				/^#toolchain template ldflags:/{l=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",l); printf "ldflags=\"%s\";",l}
+				/^#toolchain template migrate:/{m=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",m); printf "migrate=\"%s\";",m}
+				/^#toolchain template updated:/{u=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",u); printf "updated=\"%s\";",u}
+				/^#toolchain template copyof:/ {o=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/,"",o); printf "copyof=\"%s\";",o}
+			' "$1")";
 			[ -n "$version" ]   && props="^$version"    || props="^0";
 			[ -n "$cflags" ]    && props+="^$cflags"    || props+="^";
 			[ -n "$ldflags" ]   && props+="^$ldflags"   || props+="^";
@@ -1246,27 +1254,34 @@ _get_template_properties(){
 		tpl_type="$(_get_template_type "$1" | awk -F';' '{print $1}' | xargs)";
 		case "$tpl_type" in
 			"CTNG")
-					arch=$(grep '^CT_ARCH=' "$1" | awk -F'"' '{print $2}');
-					endianness="LE";
-					[ $(grep -i '^CT_ARCH_LE=y' "$1") ] && endianness="LE";
-					[ $(grep -i '^CT_ARCH_BE=y' "$1") ] && endianness="BE";
-					[ $(grep -i '^CT_ARCH_LE_BE=y' "$1") ] && endianness="LE+BE";
-					[ $(grep -i '^CT_ARCH_BE_LE=y' "$1") ] && endianness="BE+LE";
-					bitness=$(grep '^CT_ARCH_BITNESS=' "$1" | awk -F'=' '{print $2}');
+					eval "$(awk -F'"' '
+						/^CT_ARCH=/{printf "arch=\"%s\";", $2}
+						/^[Cc][Tt]_ARCH_LE=y/{printf "endianness=\"LE\";"}
+						/^[Cc][Tt]_ARCH_BE=y/{printf "endianness=\"BE\";"}
+						/^[Cc][Tt]_ARCH_LE_BE=y/{printf "endianness=\"LE+BE\";"}
+						/^[Cc][Tt]_ARCH_BE_LE=y/{printf "endianness=\"BE+LE\";"}
+						/^CT_ARCH_BITNESS=/{split($0,a,"="); printf "bitness=\"%s\";", a[2]}
+						/^CT_ARCH_CPU=/{printf "cpu=\"%s\";", $2}
+						/^CT_ARCH_ARCH=/{printf "aarch=\"%s\";", $2}
+						/^CT_CC=/{printf "cc=\"%s\";", $2}
+						/^CT_LIBC=/{printf "libc=\"%s\";", $2}
+						/^CT_KERNEL=/{printf "kernel=\"%s\";", $2}
+					' "$1")";
+					endianness="${endianness:-LE}";
 					[ "$arch" == "arm" ] && [ "$bitness" == "64" ] && arch="aarch64";
-					cpu=$(grep '^CT_ARCH_CPU=' "$1" | awk -F'"' '{print $2}') && [ -n "$cpu" ] && cpu=" $cpu";
-					[ -z "$cpu" ] && cpu=$(grep -i "^CT_ARCH_${arch}_VARIANT=" "$1" | awk -F'"' '{print $2}') && [ -n "$cpu" ] && cpu=" $cpu";
-					aarch=$(grep '^CT_ARCH_ARCH=' "$1" | awk -F'"' '{print $2}') && [ -n "$aarch" ] && aarch=" $aarch";
-					cc=$(grep '^CT_CC=' "$1" | awk -F'"' '{print $2}');
+					[ -z "$cpu" ] && cpu=$(grep -i "^CT_ARCH_${arch}_VARIANT=" "$1" | awk -F'"' '{print $2}');
+					[ -n "$cpu" ] && cpu=" $cpu";
+					[ -n "$aarch" ] && aarch=" $aarch";
 					ccv=$(grep -i "CT_${cc}_VERSION=" "$1" | awk -F'"' '{print $2}');
-					libc=$(grep '^CT_LIBC=' "$1" | awk -F'"' '{print $2}');
 					libcu=$(grep -i "^CT_${libc}_USE=" "$1" | awk -F'"' '{print $2}');
-					[ -n "$libcu" ] && libcv=$(grep -i "CT_${libcu}_VERSION=" "$1" | awk -F'"' '{print $2}');
-					[ -n "$libcu" ] && libcmv=$(grep -i "CT_${libcu}_OLDEST_ABI=" "$1" | awk -F'"' '{print $2}');
-					[ -z "$libcu" ] && libcv=$(grep -i "CT_${libc}_VERSION=" "$1" | awk -F'"' '{print $2}');
-					[ -z "$libcu" ] && libcmv=$(grep -i "CT_${libc}_OLDEST_ABI=" "$1" | awk -F'"' '{print $2}');
-					[ -n "$libcmv" ] && libcmv="${libcmv}-"
-					kernel=$(grep '^CT_KERNEL=' "$1" | awk -F'"' '{print $2}');
+					if [ -n "$libcu" ];then
+						libcv=$(grep -i "CT_${libcu}_VERSION=" "$1" | awk -F'"' '{print $2}');
+						libcmv=$(grep -i "CT_${libcu}_OLDEST_ABI=" "$1" | awk -F'"' '{print $2}');
+					else
+						libcv=$(grep -i "CT_${libc}_VERSION=" "$1" | awk -F'"' '{print $2}');
+						libcmv=$(grep -i "CT_${libc}_OLDEST_ABI=" "$1" | awk -F'"' '{print $2}');
+					fi;
+					[ -n "$libcmv" ] && libcmv="${libcmv}-";
 					kernelv=$(grep -i "CT_${kernel}_VERSION=" "$1" | awk -F'"' '{print $2}');;
 			"FNG")
 					if [ -d "$fngsrcdir" ];then
@@ -1289,27 +1304,29 @@ _get_template_properties(){
 						rm -f "$fngsrcdir/.config";
 					else
 						setup=0;
-						desc="$desc ($(printf '%q' "${txt_s3tup_msg_gtp_info}"))";
+						desc="$desc (${txt_s3tup_msg_gtp_info})";
 					fi;;
 			"ANDK")
 					if [ -d "$andksrcdir" ];then
-						arch=$(grep '^ANDK_ARCH=' "$1" | awk -F'"' '{print $2}');
-						aarch=" $(grep '^ANDK_ABI=' "$1" | awk -F'"' '{print $2}')";
-						bitness=$(grep '^ANDK_ARCH_BITNESS=' "$1" | awk -F'"' '{print $2}');
+						eval "$(awk -F'"' '
+							/^ANDK_ARCH=/{printf "arch=\"%s\";", $2}
+							/^ANDK_ABI=/{printf "aarch=\" %s\";", $2}
+							/^ANDK_ARCH_BITNESS=/{printf "bitness=\"%s\";", $2}
+							/^ANDK_API=/{printf "libcv=\"API %s\";", $2}
+						' "$1")";
 						endianness="LE";
-						libc="libc++" && libcv="API $(grep '^ANDK_API=' "$1" | awk -F'"' '{print $2}')";
+						libc="libc++";
 						cc="clang" && ccv=" $($andksrcdir/toolchains/llvm/prebuilt/linux-x86_64/bin/clang 2>/dev/null -dumpversion || echo "not supported on $(uname -i) hosts")";
 						kernel="Linux"
-						vcode=$(find $andksrcdir/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/linux/ -name "version.h" -type f -exec grep -m1 "LINUX_VERSION_CODE" {} \; | awk '{print $3}')
 						kernelv=$(_linux_version "$andksrcdir/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/linux/" | awk -F';' '{print $2}');
 					else
 						setup=0;
-						desc="$desc ($(printf '%q' "${txt_s3tup_msg_gtp_info}"))";
+						desc="$desc (${txt_s3tup_msg_gtp_info})";
 					fi;;
 			"OESDK")
 					libc="glibc";
 					cc="gcc";
-					kernel="linux";
+					kernel="linux-libc-headers";
 					local _tplname="$(basename "$1")";
 					if [ -d "$tcdir/$_tplname" ] && ls "$tcdir/$_tplname"/environment-setup-* &>/dev/null;then
 						env_script=$(ls "$tcdir/$_tplname"/environment-setup-* 2>/dev/null | grep -v 'lib32\|multilib' | head -1);
@@ -1320,11 +1337,15 @@ _get_template_properties(){
 						ccv=$("$tcdir/$_tplname/bin/${_tp}-gcc" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1);
 						libcv=$(strings "$_sr/lib/libc.so.6" 2>/dev/null | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -V | tail -1 | sed 's/GLIBC_//');
 						kernelv=$(_linux_version "$_sr/usr/include/linux/" | awk -F';' '{print $2}');
+						local _ldv=$("$tcdir/$_tplname/bin/${_tp}-ld" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1);
+						local _gdbv=$("$tcdir/$_tplname/bin/${_tp}-gdb" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1);
+						[ -n "$_ldv" ] && cc="$cc $ccv, binutils $_ldv" && ccv="" || ccv=" $ccv";
+						[ -n "$_gdbv" ] && cc="$cc, gdb $_gdbv";
 						cpu="";aarch="";endianness="LE";
 						[[ "$arch" == "aarch64" || "$arch" == "x86_64" || "$arch" == "mips64" ]] && bitness="64" || bitness="32";
 					else
 						setup=0;
-						desc="$desc ($(printf '%q' "${txt_s3tup_msg_gtp_info}"))";
+						desc="$desc (${txt_s3tup_msg_gtp_info_oesdk})";
 					fi;;
 		esac;
 
@@ -1336,15 +1357,7 @@ _get_template_properties(){
 };
 _get_template_type(){
 	if [ -f "$1" ];then
-		if [ $(grep -c '^FREETZ_' "$1") -gt 0 ];then
-			echo "FNG;freetz-NG";
-		elif [ $(grep -c '^ANDK_' "$1") -gt 0 ];then
-			echo "ANDK;Android-NDK";
-		elif [ $(grep -c '^OESDK_' "$1") -gt 0 ];then
-			echo "OESDK;Open-Embedded-SDK";
-		else
-			echo "CTNG;crosstool-NG";
-		fi;
+		awk 'BEGIN{t="CTNG;crosstool-NG"} /^FREETZ_/{t="FNG;freetz-NG";exit} /^ANDK_/{t="ANDK;Android-NDK";exit} /^OESDK_/{t="OESDK;Open-Embedded-SDK";exit} END{print t}' "$1";
 	else
 		echo "LGCY;Legacy";
 	fi;
