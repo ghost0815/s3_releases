@@ -29,7 +29,9 @@ _gui_build(){
 	make distclean > /dev/null 2>&1
 	USESTRING_=''
 	EXTRA_USE=''
+	CROSS_SYSROOT=''
 	buildtype=""
+	_us=''
 	libcount=0
 	statcount=0
 

@@ -558,7 +558,13 @@ _linux_version(){
 	printf "$vcode;$major.$patch.$sub"
 }
 
+declare -A _gcc_cap_cache
 _check_compiler_capability(){
+	#return cached result if available
+	local _cache_key="${_toolchainname}_$1"
+	if [ -n "${_gcc_cap_cache[$_cache_key]+x}" ]; then
+		return ${_gcc_cap_cache[$_cache_key]}
+	fi
 	check_filename="s3_gcc_cap_$1"
 	case "$1" in
 		"c11") #checking if $CC supports -std=c11
@@ -576,6 +582,7 @@ _check_compiler_capability(){
 	esac;
 	ret=$?;
 	find /tmp -name "${check_filename}.chk" -type f -exec rm {} \; &>/dev/null;
+	_gcc_cap_cache[$_cache_key]=$ret
 	return $ret
 }
 

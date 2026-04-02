@@ -993,6 +993,7 @@ _extract(){
 	exit;
 };
 _replace_tokens(){
+	[[ "$1" != *"@"* ]] && echo -e "$1" && return;
 	echo -e "$1" | sed -e "s#@TOOLCHAIN@#$tcdir/$tc#g; \
 						s#@TEMPLATE@#$cttpldir/$tpl#g; \
 						s#@TYPE@#$type#g; \
@@ -1122,7 +1123,10 @@ _get_toolchain_libs(){
 				for key in "${LIBS[@]}"
 				do
 					[ "${!key}" == "0" ] && continue;
-					libcheck="$key"_check; libcheck="$(_replace_tokens "${!libcheck}")";
+					#quick pre-check: skip if pkg filename not in check string (avoids expensive _replace_tokens/_compare_version)
+					libcheck_raw="$key"_check; libcheck_raw="${!libcheck_raw}";
+					[[ "$libcheck_raw" != *"$pkg"* ]] && continue;
+					libcheck="$(_replace_tokens "$libcheck_raw")";
 					libchecklib="$key"_checklib; libchecklib="$(_replace_tokens "${!libchecklib}")";
 					libcheckcc="$key"_checkcc; libcheckcc="$(_replace_tokens "${!libcheckcc}")";
 					libversion="$key"_version; libversion="$(_replace_tokens "${!libversion}")";

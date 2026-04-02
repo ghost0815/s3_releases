@@ -114,6 +114,7 @@ _cmd_build(){
 #fill use variables and set name addons
 	USESTRING=;
 	EXTRA_USE=;
+	CROSS_SYSROOT=''
 	buildtype=""
 	libcount=0
 	statcount=0
