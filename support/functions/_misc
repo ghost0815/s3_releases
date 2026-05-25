@@ -81,7 +81,7 @@ _generate_oscam_name(){
 	[ "$(./config.sh --enabled HAVE_DVBAPI)" == Y ] && echo -dvbapi || printf ''; );_dvbapi=$(
 	[ "$(./config.sh --enabled CARDREADER_GXAPI)" == Y ] && echo -gxapi || echo -n $_dvbapi; );_webif=$(
 	[ "$(./config.sh --enabled WEBIF)" == Y ] && echo -webif || printf ''; );_ssl=$(
-	[ "$(./config.sh --enabled WITH_SSL)" == Y ] && echo -ssl || printf ''; );_emu=$(
+	[ "${USE_vars[USE_SSL]}" == "USE_SSL=1" ] && echo -ssl || printf ''; );_emu=$(
 	[ "$(./config.sh --enabled WITH_EMU)" == Y ] && echo -emu || printf ''; );_neon=$(
 	[ "$(./config.sh --enabled WITH_ARM_NEON)" == Y ] && "$tcdir/$_toolchainname/bin/$_compiler""gcc" -dumpmachine 2>/dev/null | grep -i -E '(arm|aarch64)' &>/dev/null && echo -neon || printf ''; );_icam=$(
 	[ "$(./config.sh --enabled MODULE_STREAMRELAY)" == Y ] && echo -icam || printf ''; );_ipv6=$(
